@@ -1,6 +1,10 @@
 const User = require('../models/User')
 
+const crypto = require('crypto');
+
 const ErrorResponse = require('../utils/errorResponse');
+
+const sendMail = require('../utils/sendEmail');
 
 
 exports.register = async(req, res, next) => {
@@ -59,14 +63,62 @@ exports.forgotpassword = async(req, res, next) => {
         const resetToken = user.getResetPasswordToken()
 
         await user.save();
+
+        const resetUrl = `http://localhost:3000/passwordreset/${resetToken}`;
+
+		const message = `
+		<h1>You have requested a password reset</h1>
+		<p>Please make a put request to the following link:</p>
+		<a href=${resetUrl} clicktracking=off>${resetUrl}</a>
+		`;
+
+        try {
+            
+			await sendMail({
+				to: user.email,
+				subject: 'Password reset request',
+				text: message,
+			});
+
+			res.status(200).json({ success: true, data: 'Email Sent' });
+		} catch (error) {
+			user.resetPasswordToken = undefined;
+			user.resetPasswordExpire = undefined;
+			await user.save();
+
+			return next(new ErrorResponse('Email could not be send', 500));
+		}
+
     } catch (error) {
-        
+        next(error);
     }
 
 }
 
-exports.resetpassword = (req, res, next) => {
-    res.send("Reset password route");
+exports.resetpassword = async(req, res, next) => {
+    const resetPasswordToken = crypto.createHash("sha256").update(req.params.resetToken).digest("hex");
+    try {
+        const user = await User.findOne({ 
+            resetPasswordToken, 
+            resetPasswordExpire: { $gt:Date.now() }
+        })
+
+        if(!user){
+            return next( new ErrorResponse("Invalid Reset Token",400))
+        }
+
+        user.password = req.body.password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+
+        user.save();
+        res.status(201).json({
+            success: true,
+            data: "Password reset success"
+        })
+    } catch (error) {
+        next(error);
+    }
 }
 
 const sendToken = (user, statusCode, res) => {
