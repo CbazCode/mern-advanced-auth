@@ -7,7 +7,9 @@ const oAuth2Client = new google.auth.OAuth2(
     process.env.AUTH_REDIRECT_URI
 );
 
+
 oAuth2Client.setCredentials({ refresh_token: process.env.AUTH_REFRESH_TOKEN });
+
 
 sendMail = async(options) =>{
 
